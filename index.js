@@ -40,5 +40,7 @@ for (const file of eventFiles) {
     client.on(event.name, (...args) => event.execute(...args, client));
   }
 }
+console.log("DISCORD_TOKEN:", process.env.DISCORD_TOKEN);
+console.log("TOKEN LENGTH:", process.env.DISCORD_TOKEN?.length);
 
 client.login(process.env.DISCORD_TOKEN);
