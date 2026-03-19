@@ -5,6 +5,7 @@ const {
   ButtonBuilder,
   ButtonStyle
 } = require('discord.js');
+const fetch = require('node-fetch');
 
 const ALLOWED_CHANNEL_ID = '1484047680714965083';
 
@@ -30,7 +31,7 @@ function generateCaption(style) {
       'Most people are still sleeping on this 👇',
       'You need to see this 👇',
       'This is where things get interesting 👇',
-      'Watch this and you’ll get it 👇'
+      'Watch this and you will get it 👇'
     ],
     educational: [
       'Quick breakdown you should watch 👇',
@@ -62,7 +63,25 @@ function generatePingMessage() {
 }
 
 function isTikTokLink(link) {
-  return /tiktok\.com|vm\.tiktok\.com/i.test(link);
+  return /tiktok\.com|vt\.tiktok\.com|vm\.tiktok\.com/i.test(link);
+}
+
+async function resolveTikTokLink(url) {
+  if (!/vt\.tiktok\.com|vm\.tiktok\.com/i.test(url)) {
+    return url;
+  }
+
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      redirect: 'follow'
+    });
+
+    return response.url || url;
+  } catch (error) {
+    console.error('Failed to resolve TikTok short link:', error);
+    return url;
+  }
 }
 
 module.exports = {
@@ -103,7 +122,9 @@ module.exports = {
         });
       }
 
-      const hasRole = interaction.member.roles.cache.some(role =>
+      const member = await interaction.guild.members.fetch(interaction.user.id);
+
+      const hasRole = member.roles.cache.some(role =>
         ALLOWED_ROLE_IDS.includes(role.id)
       );
 
@@ -114,9 +135,13 @@ module.exports = {
         });
       }
 
-      const link = interaction.options.getString('link');
+      let link = interaction.options.getString('link');
       const style = interaction.options.getString('style');
       const captionInput = interaction.options.getString('caption');
+
+      if (isTikTokLink(link)) {
+        link = await resolveTikTokLink(link);
+      }
 
       const finalCaption = captionInput || generateCaption(style);
       const pingMessage = generatePingMessage();
@@ -125,9 +150,11 @@ module.exports = {
       const embed = new EmbedBuilder()
         .setColor('#00b0f4')
         .setTitle(tiktok ? '🎥 BitRing TikTok Drop' : '🚀 BitRing Angel Drop')
-        .setDescription(`${finalCaption}\n\n${link}`)
-        .addFields({ name: 'Style', value: style, inline: true })
-        .setFooter({ text: `Posted by ${interaction.user.username}` });
+        .setDescription(finalCaption)
+        .addFields(
+          { name: 'Style', value: style, inline: true },
+          { name: 'Posted by', value: interaction.user.username, inline: true }
+        );
 
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
@@ -137,7 +164,7 @@ module.exports = {
       );
 
       await interaction.channel.send({
-        content: pingMessage,
+        content: `${pingMessage}\n${link}`,
         embeds: [embed],
         components: [row],
         allowedMentions: { parse: ['everyone'] }
