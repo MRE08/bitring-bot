@@ -27,45 +27,48 @@ function containsLink(text) {
   return patterns.some(regex => regex.test(text));
 }
 
-function loadOffenders() {
-  try {
-    if (!fs.existsSync(OFFENDER_FILE)) {
-      fs.writeFileSync(OFFENDER_FILE, JSON.stringify({}, null, 2));
-    }
+function ensureFile() {
+  const dir = path.dirname(OFFENDER_FILE);
 
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+
+  if (!fs.existsSync(OFFENDER_FILE)) {
+    fs.writeFileSync(OFFENDER_FILE, JSON.stringify({}, null, 2));
+  }
+}
+
+function loadData() {
+  try {
+    ensureFile();
     return JSON.parse(fs.readFileSync(OFFENDER_FILE, 'utf8'));
-  } catch (error) {
-    console.error('Failed to load offender file:', error);
+  } catch (err) {
+    console.error('Load error:', err);
     return {};
   }
 }
 
-function saveOffenders(data) {
+function saveData(data) {
   try {
     fs.writeFileSync(OFFENDER_FILE, JSON.stringify(data, null, 2));
-  } catch (error) {
-    console.error('Failed to save offender file:', error);
+  } catch (err) {
+    console.error('Save error:', err);
   }
 }
 
-function getOffenseCount(userId) {
-  const offenders = loadOffenders();
-  return offenders[userId]?.count || 0;
-}
+function increment(userId) {
+  const data = loadData();
 
-function incrementOffense(userId) {
-  const offenders = loadOffenders();
-
-  if (!offenders[userId]) {
-    offenders[userId] = { count: 0, lastUpdated: null };
+  if (!data[userId]) {
+    data[userId] = { count: 0 };
   }
 
-  offenders[userId].count += 1;
-  offenders[userId].lastUpdated = new Date().toISOString();
+  data[userId].count += 1;
 
-  saveOffenders(offenders);
+  saveData(data);
 
-  return offenders[userId].count;
+  return data[userId].count;
 }
 
 module.exports = {
@@ -75,106 +78,123 @@ module.exports = {
       if (message.author.bot) return;
       if (!message.guild) return;
 
-      const hasAdminPerm = message.member?.permissions.has(
+      const hasAdmin = message.member?.permissions.has(
         PermissionFlagsBits.Administrator
       );
 
-      const hasAllowedRole = message.member?.roles?.cache?.some(role =>
+      const hasRole = message.member?.roles?.cache?.some(role =>
         ALLOWED_ROLE_IDS.includes(role.id)
       );
 
-      // ---------- LINK MODERATION ----------
-      if (!hasAdminPerm && !hasAllowedRole && containsLink(message.content)) {
-        const originalContent = message.content;
+      // 🚨 LINK MODERATION
+      if (!hasAdmin && !hasRole && containsLink(message.content)) {
+        const original = message.content;
         const member = message.member;
-        const offenseCount = incrementOffense(message.author.id);
 
-        await message.delete().catch(console.error);
+        const count = increment(message.author.id);
 
+        console.log(`Link detected from ${message.author.tag} | Count: ${count}`);
+
+        // 🔴 DELETE MESSAGE (WITH DEBUG)
+        const deleted = await message.delete().then(() => true).catch(err => {
+          console.error('❌ DELETE FAILED:', err);
+          return false;
+        });
+
+        // ⚠️ WARNING MESSAGE
         let warningText = `${message.author} you are not allowed to send links here.`;
 
-        if (offenseCount === 2) {
-          warningText = `${message.author} this is your second warning. You are not allowed to send links here.`;
+        if (count === 2) {
+          warningText = `${message.author} this is your second warning. Stop sending links.`;
         }
 
-        if (offenseCount >= 3) {
-          warningText = `${message.author} you have repeatedly posted unauthorized links and have been flagged.`;
+        if (count >= 3) {
+          warningText = `${message.author} repeated violations detected. Action taken.`;
         }
 
-        const warning = await message.channel.send(warningText).catch(() => null);
+        const warn = await message.channel.send(warningText).catch(err => {
+          console.error('❌ WARNING SEND FAILED:', err);
+          return null;
+        });
 
-        if (warning) {
-          setTimeout(() => {
-            warning.delete().catch(() => {});
-          }, 8000);
+        if (warn) {
+          setTimeout(() => warn.delete().catch(() => {}), 8000);
         }
 
+        // ⛔ TIMEOUT
         let timeoutApplied = false;
 
-        if (offenseCount >= 3 && member?.moderatable) {
-          try {
-            await member.timeout(
-              10 * 60 * 1000,
-              'Repeated unauthorized link posting'
-            );
-            timeoutApplied = true;
-          } catch (error) {
-            console.error('Failed to timeout user:', error);
+        if (count >= 3) {
+          if (member?.moderatable) {
+            try {
+              await member.timeout(10 * 60 * 1000, 'Spam links');
+              timeoutApplied = true;
+            } catch (err) {
+              console.error('❌ TIMEOUT FAILED:', err);
+            }
+          } else {
+            console.log('⚠️ USER NOT MODERATABLE (CHECK ROLE POSITION)');
           }
         }
 
-        const logChannel = message.guild.channels.cache.get(LOG_CHANNEL_ID);
+        // 📊 LOGGING (WITH DEBUG)
+        let logChannel = message.guild.channels.cache.get(LOG_CHANNEL_ID);
 
-        if (logChannel) {
-          const logEmbed = new EmbedBuilder()
-            .setColor(offenseCount >= 3 ? '#ff0000' : '#ff9900')
-            .setTitle('Unauthorized Link Attempt')
+        if (!logChannel) {
+          logChannel = await message.guild.channels.fetch(LOG_CHANNEL_ID).catch(err => {
+            console.error('❌ FETCH LOG CHANNEL FAILED:', err);
+            return null;
+          });
+        }
+
+        if (!logChannel) {
+          console.error(`❌ LOG CHANNEL NOT FOUND: ${LOG_CHANNEL_ID}`);
+        } else {
+          console.log('✅ LOG CHANNEL FOUND');
+
+          const embed = new EmbedBuilder()
+            .setColor(count >= 3 ? '#ff0000' : '#ffaa00')
+            .setTitle('🚨 Link Violation')
             .addFields(
-              { name: 'User', value: `${message.author.tag} (${message.author.id})` },
+              { name: 'User', value: message.author.tag },
+              { name: 'User ID', value: message.author.id },
               { name: 'Channel', value: `<#${message.channelId}>` },
-              { name: 'Attempt Count', value: String(offenseCount), inline: true },
-              {
-                name: 'Timeout Applied',
-                value: timeoutApplied ? 'Yes, 10 minutes' : 'No',
-                inline: true
-              },
-              {
-                name: 'Message Content',
-                value: originalContent.slice(0, 1024) || 'No content'
-              }
+              { name: 'Attempts', value: String(count), inline: true },
+              { name: 'Deleted', value: deleted ? 'Yes' : 'No', inline: true },
+              { name: 'Timeout', value: timeoutApplied ? 'Yes' : 'No', inline: true },
+              { name: 'Message', value: original.slice(0, 1024) || 'No content' }
             )
-            .setTimestamp()
-            .setFooter({ text: 'BitRing Moderation Log' });
+            .setTimestamp();
 
-          await logChannel.send({ embeds: [logEmbed] }).catch(console.error);
+          await logChannel.send({ embeds: [embed] }).catch(err => {
+            console.error('❌ LOG SEND FAILED:', err);
+          });
         }
 
         return;
       }
 
-      // ---------- AUTO REPLIES ----------
-      const text = message.content.toLowerCase().trim();
+      // 💬 AUTO REPLIES
+      const text = message.content.toLowerCase();
 
       if (text.includes('whitepaper')) {
-        await message.reply('Here is the whitepaper: https://www.bitring.xyz/brt-protocol');
-        return;
+        return message.reply('Here is the whitepaper: https://www.bitring.xyz/brt-protocol');
       }
 
       if (text.includes('docs')) {
-        await message.reply('Here are the docs: https://www.bitring.xyz/brt-protocol');
-        return;
+        return message.reply('Here are the docs: https://www.bitring.xyz/brt-protocol');
       }
 
       if (text.includes('website')) {
-        await message.reply('Here is the website: https://www.bitring.xyz');
-        return;
+        return message.reply('Here is the website: https://www.bitring.xyz');
       }
 
       if (text.includes('twitter') || text.includes('x account')) {
-        await message.reply('Here is the X account: https://x.com/bitring2025');
+        return message.reply('Here is the X account: https://x.com/bitring2025');
       }
-    } catch (error) {
-      console.error('messageCreate error:', error);
+
+    } catch (err) {
+      console.error('❌ GLOBAL ERROR:', err);
     }
   },
 };
