@@ -77,8 +77,7 @@ module.exports = {
     try {
       if (message.author.bot) return;
       if (!message.guild) return;
-
-      const hasAdmin = message.member?.permissions.has(
+          const hasAdmin = message.member?.permissions.has(
         PermissionFlagsBits.Administrator
       );
 
@@ -86,8 +85,40 @@ module.exports = {
         ALLOWED_ROLE_IDS.includes(role.id)
       );
 
+      // 🚫 BLOCK @everyone / @here
+      if (
+        !hasAdmin &&
+        !hasRole &&
+        (message.mentions.everyone || message.content.includes('@here'))
+      ) {
+        console.log(`Everyone/here mention detected from ${message.author.tag}`);
+
+        const deleted = await message.delete().then(() => true).catch(err => {
+          console.error('❌ DELETE FAILED (@everyone/@here):', err);
+          return false;
+        });
+
+        let warningText = `${message.author} you are not allowed to tag everyone or here.`;
+
+        if (!deleted) {
+          warningText = `${message.author} you are not allowed to tag everyone or here, but I could not delete your message. Check my permissions.`;
+        }
+
+        const warn = await message.channel.send(warningText).catch(err => {
+          console.error('❌ WARNING SEND FAILED (@everyone/@here):', err);
+          return null;
+        });
+
+        if (warn) {
+          setTimeout(() => warn.delete().catch(() => {}), 5000);
+        }
+
+        return;
+      }
+
       // 🚨 LINK MODERATION
       if (!hasAdmin && !hasRole && containsLink(message.content)) {
+    
         const original = message.content;
         const member = message.member;
 
