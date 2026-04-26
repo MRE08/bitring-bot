@@ -9,6 +9,7 @@ const ALLOWED_ROLE_IDS = [
 ];
 
 const LOG_CHANNEL_ID = '1487011713164509194';
+const GM_CHANNEL_ID = '1347177401930743910';
 
 const OFFENDER_FILE = path.join(__dirname, '..', 'data', 'linkOffenders.json');
 
@@ -204,6 +205,33 @@ module.exports = {
 
         return;
       }
+
+      // 🌅 GM AUTO REPLY SYSTEM
+if (message.channelId === GM_CHANNEL_ID) {
+  const text = message.content.toLowerCase().trim();
+
+  if (text === 'gm' || text.startsWith('gm ')) {
+
+    const replies = [
+      `gm ${message.author} 🌅`,
+      `good morning ${message.author} ☀️`,
+      `gm legend ${message.author} 🚀`,
+      `rise and grind ${message.author} 💪`,
+      `gm king ${message.author} 👑`,
+      `gm soldier ${message.author} 🫡`,
+      `gm fam ${message.author} 🔥`,
+      `another day, another win ${message.author} 💰`
+    ];
+
+    const randomReply = replies[Math.floor(Math.random() * replies.length)];
+
+    await message.reply(randomReply).catch(err => {
+      console.error('❌ GM REPLY FAILED:', err);
+    });
+
+    return;
+  }
+}
 
       // 💬 AUTO REPLIES
       const text = message.content.toLowerCase();
