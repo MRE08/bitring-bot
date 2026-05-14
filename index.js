@@ -44,4 +44,9 @@ const token = process.env.DISCORD_TOKEN?.trim();
 
 console.log("TOKEN LENGTH:", token?.length);
 
+if (!token) {
+  console.error("Discord_Token is missing");
+  process.exit(1);
+}
+
 client.login(token);
