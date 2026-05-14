@@ -242,7 +242,7 @@ module.exports = {
                 console.error('❌ GM DELETE FAILED:', err);
               });
 
-            }, 30000);
+            }, 10000);
 
           }
 
