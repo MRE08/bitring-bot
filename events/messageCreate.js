@@ -74,11 +74,14 @@ function increment(userId) {
 
 module.exports = {
   name: Events.MessageCreate,
+
   async execute(message) {
     try {
+
       if (message.author.bot) return;
       if (!message.guild) return;
-          const hasAdmin = message.member?.permissions.has(
+
+      const hasAdmin = message.member?.permissions.has(
         PermissionFlagsBits.Administrator
       );
 
@@ -92,6 +95,7 @@ module.exports = {
         !hasRole &&
         (message.mentions.everyone || message.content.includes('@here'))
       ) {
+
         console.log(`Everyone/here mention detected from ${message.author.tag}`);
 
         const deleted = await message.delete().then(() => true).catch(err => {
@@ -102,16 +106,18 @@ module.exports = {
         let warningText = `${message.author} you are not allowed to tag everyone or here.`;
 
         if (!deleted) {
-          warningText = `${message.author} you are not allowed to tag everyone or here, but I could not delete your message. Check my permissions.`;
+          warningText = `${message.author} you are not allowed to tag everyone or here, but I could not delete your message.`;
         }
 
         const warn = await message.channel.send(warningText).catch(err => {
-          console.error('❌ WARNING SEND FAILED (@everyone/@here):', err);
+          console.error('❌ WARNING SEND FAILED:', err);
           return null;
         });
 
         if (warn) {
-          setTimeout(() => warn.delete().catch(() => {}), 5000);
+          setTimeout(() => {
+            warn.delete().catch(() => {});
+          }, 5000);
         }
 
         return;
@@ -119,7 +125,7 @@ module.exports = {
 
       // 🚨 LINK MODERATION
       if (!hasAdmin && !hasRole && containsLink(message.content)) {
-    
+
         const original = message.content;
         const member = message.member;
 
@@ -127,13 +133,11 @@ module.exports = {
 
         console.log(`Link detected from ${message.author.tag} | Count: ${count}`);
 
-        // 🔴 DELETE MESSAGE (WITH DEBUG)
         const deleted = await message.delete().then(() => true).catch(err => {
           console.error('❌ DELETE FAILED:', err);
           return false;
         });
 
-        // ⚠️ WARNING MESSAGE
         let warningText = `${message.author} you are not allowed to send links here.`;
 
         if (count === 2) {
@@ -150,26 +154,29 @@ module.exports = {
         });
 
         if (warn) {
-          setTimeout(() => warn.delete().catch(() => {}), 8000);
+          setTimeout(() => {
+            warn.delete().catch(() => {});
+          }, 8000);
         }
 
-        // ⛔ TIMEOUT
         let timeoutApplied = false;
 
         if (count >= 3) {
+
           if (member?.moderatable) {
+
             try {
               await member.timeout(10 * 60 * 1000, 'Spam links');
               timeoutApplied = true;
             } catch (err) {
               console.error('❌ TIMEOUT FAILED:', err);
             }
+
           } else {
-            console.log('⚠️ USER NOT MODERATABLE (CHECK ROLE POSITION)');
+            console.log('⚠️ USER NOT MODERATABLE');
           }
         }
 
-        // 📊 LOGGING (WITH DEBUG)
         let logChannel = message.guild.channels.cache.get(LOG_CHANNEL_ID);
 
         if (!logChannel) {
@@ -179,10 +186,7 @@ module.exports = {
           });
         }
 
-        if (!logChannel) {
-          console.error(`❌ LOG CHANNEL NOT FOUND: ${LOG_CHANNEL_ID}`);
-        } else {
-          console.log('✅ LOG CHANNEL FOUND');
+        if (logChannel) {
 
           const embed = new EmbedBuilder()
             .setColor(count >= 3 ? '#ff0000' : '#ffaa00')
@@ -205,11 +209,14 @@ module.exports = {
 
         return;
       }
-        // 🌅 GM AUTO REPLY SYSTEM
+
+      // 🌅 GM AUTO REPLY SYSTEM
       if (message.channelId === GM_CHANNEL_ID) {
+
         const text = message.content.toLowerCase();
 
         if (text.includes('gm')) {
+
           const replies = [
             `gm ${message.author} 🌅`,
             `good morning ${message.author} ☀️`,
@@ -219,11 +226,25 @@ module.exports = {
             `gm fam ${message.author} 🔥`
           ];
 
-          const randomReply = replies[Math.floor(Math.random() * replies.length)];
+          const randomReply =
+            replies[Math.floor(Math.random() * replies.length)];
 
-          await message.reply(randomReply).catch(err => {
+          const botMsg = await message.reply(randomReply).catch(err => {
             console.error('❌ GM REPLY FAILED:', err);
+            return null;
           });
+
+          if (botMsg) {
+
+            setTimeout(() => {
+
+              botMsg.delete().catch(err => {
+                console.error('❌ GM DELETE FAILED:', err);
+              });
+
+            }, 30000);
+
+          }
 
           return;
         }
@@ -233,23 +254,33 @@ module.exports = {
       const text = message.content.toLowerCase();
 
       if (text.includes('whitepaper')) {
-        return message.reply('Here is the whitepaper: https://www.bitring.xyz/brt-protocol');
+        return message.reply(
+          'Here is the whitepaper: https://www.bitring.xyz/brt-protocol'
+        );
       }
 
       if (text.includes('docs')) {
-        return message.reply('Here are the docs: https://www.bitring.xyz/brt-protocol');
+        return message.reply(
+          'Here are the docs: https://www.bitring.xyz/brt-protocol'
+        );
       }
 
       if (text.includes('website')) {
-        return message.reply('Here is the website: https://www.bitring.xyz');
+        return message.reply(
+          'Here is the website: https://www.bitring.xyz'
+        );
       }
 
       if (text.includes('twitter') || text.includes('x account')) {
-        return message.reply('Here is the X account: https://x.com/bitring2025');
+        return message.reply(
+          'Here is the X account: https://x.com/bitring2025'
+        );
       }
 
     } catch (err) {
+
       console.error('❌ GLOBAL ERROR:', err);
+
     }
   },
 };

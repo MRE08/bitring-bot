@@ -16,9 +16,11 @@ module.exports = {
       `Make sure to check out <#${announcementChannelId}> and <#${officiallinkchannelId}>.`
     );
 
-    // ⏱️ Delete after 15 seconds
+    // ⏱️ Delete after 30 seconds
     setTimeout(() => {
-      message.delete().catch(() => {});
+      message.delete().catch((err) => {
+        console.error("Failed to delete welcome message")
+      });
     }, 30000);
   },
 };
